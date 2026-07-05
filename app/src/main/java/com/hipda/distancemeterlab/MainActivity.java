@@ -37,7 +37,13 @@ import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.Toast;
 
+import com.google.ar.core.ArCoreApk;
+import com.google.ar.core.Config;
+import com.google.ar.core.Session;
+import com.google.ar.core.exceptions.UnavailableException;
+
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.OutputStream;
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
@@ -331,6 +337,89 @@ public class MainActivity extends Activity {
     }
 
     public class AndroidBridge {
+        @JavascriptInterface
+        public String getArCoreStatus() {
+            try {
+                ArCoreApk.Availability availability = ArCoreApk.getInstance().checkAvailability(MainActivity.this);
+                if (availability.isTransient()) {
+                    return "ARCore 状态检查中，请稍后再试";
+                }
+                if (availability.isSupported()) {
+                    return "ARCore 支持：可进入真实平面/深度接入流程";
+                }
+                return "ARCore 不支持：此设备只能使用相机估算模式";
+            } catch (Exception e) {
+                return "ARCore 检查失败：" + e.getMessage();
+            }
+        }
+
+        @JavascriptInterface
+        public String requestArCoreInstall() {
+            try {
+                ArCoreApk.InstallStatus status = ArCoreApk.getInstance().requestInstall(MainActivity.this, true);
+                return status == ArCoreApk.InstallStatus.INSTALLED
+                        ? "Google Play Services for AR 已安装"
+                        : "已打开 ARCore 安装/更新流程";
+            } catch (UnavailableException e) {
+                return "ARCore 服务不可用：" + e.getMessage();
+            } catch (Exception e) {
+                return "ARCore 安装检查失败：" + e.getMessage();
+            }
+        }
+
+        @JavascriptInterface
+        public String probeArSession() {
+            Session session = null;
+            try {
+                session = new Session(MainActivity.this);
+                Config config = session.getConfig();
+                config.setPlaneFindingMode(Config.PlaneFindingMode.HORIZONTAL_AND_VERTICAL);
+                if (session.isDepthModeSupported(Config.DepthMode.AUTOMATIC)) {
+                    config.setDepthMode(Config.DepthMode.AUTOMATIC);
+                }
+                session.configure(config);
+                return config.getDepthMode() == Config.DepthMode.AUTOMATIC
+                        ? "AR Session 可创建：平面检测与深度模式可用"
+                        : "AR Session 可创建：平面检测可用，深度模式不可用";
+            } catch (Exception e) {
+                return "AR Session 探测失败：" + e.getMessage();
+            } finally {
+                if (session != null) {
+                    session.close();
+                }
+            }
+        }
+
+        @JavascriptInterface
+        public String getAiEngineStatus() {
+            boolean libraryReady;
+            try {
+                Class.forName("com.google.mediapipe.tasks.vision.objectdetector.ObjectDetector");
+                libraryReady = true;
+            } catch (ClassNotFoundException e) {
+                libraryReady = false;
+            }
+            boolean modelReady = false;
+            try {
+                String[] assets = getAssets().list("");
+                if (assets != null) {
+                    for (String asset : assets) {
+                        if ("object_detector.tflite".equals(asset)) {
+                            modelReady = true;
+                            break;
+                        }
+                    }
+                }
+            } catch (IOException ignored) {
+            }
+            if (!libraryReady) {
+                return "MediaPipe Tasks Vision 未加载";
+            }
+            return modelReady
+                    ? "MediaPipe 已接入，检测模型 object_detector.tflite 已就绪"
+                    : "MediaPipe 已接入；请放入 object_detector.tflite 后启用模型计数";
+        }
+
         @JavascriptInterface
         public boolean isNativeCamera() {
             return true;
