@@ -367,6 +367,19 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void sharePng(final String dataUrl) {
+            shareFile(dataUrl, "image/png", "measure", ".png",
+                    "Pictures/DistanceMeterLab", "Share measurement result");
+        }
+
+        @JavascriptInterface
+        public void sharePdf(final String dataUrl) {
+            shareFile(dataUrl, "application/pdf", "measure_report", ".pdf",
+                    "Download/DistanceMeterLab", "Share measurement report");
+        }
+
+        private void shareFile(final String dataUrl, final String mimeType, final String prefix,
+                               final String extension, final String relativePath,
+                               final String chooserTitle) {
             runOnUiThread(() -> {
                 try {
                     String base64 = dataUrl;
@@ -375,38 +388,43 @@ public class MainActivity extends Activity {
                         base64 = base64.substring(comma + 1);
                     }
                     byte[] bytes = Base64.decode(base64, Base64.DEFAULT);
-                    String name = "measure_"
+                    String name = prefix + "_"
                             + new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date())
-                            + ".png";
+                            + extension;
                     ContentValues values = new ContentValues();
-                    values.put(MediaStore.Images.Media.DISPLAY_NAME, name);
-                    values.put(MediaStore.Images.Media.MIME_TYPE, "image/png");
+                    values.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
+                    values.put(MediaStore.MediaColumns.MIME_TYPE, mimeType);
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        values.put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/DistanceMeterLab");
-                        values.put(MediaStore.Images.Media.IS_PENDING, 1);
+                        values.put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath);
+                        values.put(MediaStore.MediaColumns.IS_PENDING, 1);
                     }
                     ContentResolver resolver = getContentResolver();
-                    Uri uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+                    Uri collection = mimeType.startsWith("image/")
+                            ? MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+                            : (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                            ? MediaStore.Downloads.EXTERNAL_CONTENT_URI
+                            : MediaStore.Files.getContentUri("external"));
+                    Uri uri = resolver.insert(collection, values);
                     if (uri == null) {
-                        throw new IllegalStateException("Unable to create image file");
+                        throw new IllegalStateException("Unable to create file");
                     }
                     OutputStream outputStream = resolver.openOutputStream(uri);
                     if (outputStream == null) {
-                        throw new IllegalStateException("Unable to write image file");
+                        throw new IllegalStateException("Unable to write file");
                     }
                     outputStream.write(bytes);
                     outputStream.flush();
                     outputStream.close();
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                         values.clear();
-                        values.put(MediaStore.Images.Media.IS_PENDING, 0);
+                        values.put(MediaStore.MediaColumns.IS_PENDING, 0);
                         resolver.update(uri, values, null, null);
                     }
                     Intent send = new Intent(Intent.ACTION_SEND);
-                    send.setType("image/png");
+                    send.setType(mimeType);
                     send.putExtra(Intent.EXTRA_STREAM, uri);
                     send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                    startActivity(Intent.createChooser(send, "Share measurement result"));
+                    startActivity(Intent.createChooser(send, chooserTitle));
                 } catch (Exception e) {
                     Toast.makeText(MainActivity.this, "Share failed: " + e.getMessage(), Toast.LENGTH_LONG).show();
                 }
