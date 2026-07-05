@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<title>AI测距实验室</title>
+<style>
+  :root{--bg:#08111f;--card:rgba(10,19,35,.82);--text:#ecf6ff;--muted:#9db3c7;--line:#00d4ff;--ok:#54f0a8;--warn:#ffd166;--bad:#ff6b7a}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent} body{margin:0;background:#000;color:var(--text);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow:hidden}
+  #stage{position:fixed;inset:0;background:#000;overflow:hidden} video,#draw{position:absolute;inset:0;width:100%;height:100%;object-fit:cover} #shade{position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.55),transparent 28%,transparent 58%,rgba(0,0,0,.72))}
+  #hud{position:absolute;left:10px;right:10px;top:8px;display:grid;grid-template-columns:1fr auto;gap:8px;align-items:start;z-index:5}.panel{background:var(--card);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:10px;box-shadow:0 8px 28px rgba(0,0,0,.26)}
+  .title{font-weight:750;font-size:15px;letter-spacing:.2px}.tiny{font-size:11px;color:var(--muted);line-height:1.45}.metric{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:7px}.box{background:rgba(255,255,255,.08);border-radius:12px;padding:7px;text-align:center}.box b{display:block;font-size:17px;color:#fff}.box span{font-size:11px;color:var(--muted)}
+  #modes{position:absolute;left:8px;right:8px;bottom:122px;display:flex;gap:7px;overflow:auto;padding-bottom:2px;z-index:6}.mode{white-space:nowrap;border:1px solid rgba(255,255,255,.16);background:rgba(7,15,28,.75);color:#dfefff;border-radius:999px;padding:9px 12px;font-size:13px}.mode.active{background:var(--line);color:#001522;border-color:var(--line);font-weight:800}
+  #controls{position:absolute;left:8px;right:8px;bottom:8px;z-index:6;display:grid;grid-template-columns:repeat(4,1fr);gap:7px}.btn{border:0;border-radius:13px;padding:10px 8px;background:rgba(255,255,255,.12);color:var(--text);font-weight:700;font-size:13px}.btn.primary{background:var(--line);color:#001522}.btn.good{background:var(--ok);color:#032015}.btn.warn{background:var(--warn);color:#271b00}.btn.bad{background:var(--bad);color:#2b0008}
+  #settings{position:absolute;right:10px;top:118px;width:min(360px,calc(100vw - 20px));z-index:9;display:none}.row{display:grid;grid-template-columns:112px 1fr 54px;gap:8px;align-items:center;margin:8px 0}.row label{font-size:12px;color:var(--muted)} input[type=range]{width:100%} input[type=number]{width:100%;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.14);border-radius:10px;color:#fff;padding:8px}.pill{display:inline-flex;align-items:center;gap:5px;border:1px solid rgba(255,255,255,.14);border-radius:999px;padding:5px 8px;margin:3px;background:rgba(255,255,255,.08);font-size:12px;color:#d9ecff}
+  #readout{position:absolute;left:10px;right:10px;bottom:174px;z-index:5;pointer-events:none}.readCard{display:inline-block;max-width:100%;background:rgba(4,10,19,.82);border:1px solid rgba(0,212,255,.35);border-radius:14px;padding:9px 12px;font-size:13px;line-height:1.55}.readCard strong{color:var(--line)}
+  .cross:before,.cross:after{content:"";position:absolute;background:rgba(0,212,255,.95);box-shadow:0 0 12px rgba(0,212,255,.5)}.cross:before{left:50%;top:43%;width:2px;height:14%;transform:translateX(-1px)}.cross:after{top:50%;left:43%;height:2px;width:14%;transform:translateY(-1px)}.reticle{position:absolute;left:50%;top:50%;width:42px;height:42px;border:2px solid rgba(0,212,255,.82);border-radius:50%;transform:translate(-50%,-50%);box-shadow:0 0 18px rgba(0,212,255,.25)}
+  #ruler{position:absolute;left:18px;right:18px;bottom:220px;height:74px;background:rgba(255,255,255,.9);color:#111;border-radius:8px;display:none;z-index:5;overflow:hidden}.tick{position:absolute;bottom:0;width:1px;background:#111}.tick.major{height:46px}.tick.mid{height:34px}.tick.minor{height:22px}.tick span{position:absolute;bottom:48px;left:3px;font-size:11px;font-weight:700}
+  #toast{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.78);padding:12px 16px;border-radius:13px;display:none;z-index:99;max-width:80%;font-size:14px;text-align:center}
+  @media(max-width:420px){#controls{grid-template-columns:repeat(2,1fr)}#modes{bottom:220px}#readout{bottom:268px}.metric{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<div id="stage">
+  <video id="video" autoplay playsinline muted></video><canvas id="draw"></canvas><div id="shade"></div><div class="cross"></div><div class="reticle"></div><div id="ruler"></div>
+  <div id="hud"><div class="panel"><div class="title">AI测距实验室 <span class="tiny">原型版</span></div><div class="tiny" id="status">正在启动相机与传感器...</div><div class="metric"><div class="box"><b id="pitch">--°</b><span>俯仰</span></div><div class="box"><b id="roll">--°</b><span>横滚/挂画</span></div><div class="box"><b id="dist">--</b><span>距离</span></div></div></div><button class="btn" onclick="toggleSettings()">设置</button></div>
+  <div id="settings" class="panel"><div class="title">测量参数</div><div class="row"><label>镜头高度 cm</label><input id="lensHeight" type="number" value="150" min="20" max="250" step="1" onchange="savePrefs()"><span class="tiny">可手输</span></div><div class="row"><label>相机水平视角</label><input id="hfov" type="range" min="45" max="90" value="65" oninput="savePrefs()"><span id="hfovVal" class="tiny">65°</span></div><div class="row"><label>角度修正</label><input id="angleOffset" type="range" min="-45" max="45" value="0" oninput="savePrefs()"><span id="offVal" class="tiny">0°</span></div><div><span class="pill" onclick="calibrateHorizon()">水平校准</span><span class="pill" onclick="flipAngle()">角度反向</span><span class="pill" onclick="resetAll()">清空点位</span></div><div class="tiny">提示：这类相机测距本质是估算。先把手机镜头高度填准，测地面底部点时手机要稳，室内近距离更准。</div></div>
+  <div id="readout"><div class="readCard" id="readText">选择模式开始测量。</div></div>
+  <div id="modes"><button class="mode active" data-mode="distance">测距/高度</button><button class="mode" data-mode="ar">AR标尺</button><button class="mode" data-mode="count">AI计数</button><button class="mode" data-mode="level">水平仪</button><button class="mode" data-mode="angle">量角器</button><button class="mode" data-mode="ruler">直尺</button></div>
+  <div id="controls"><button class="btn primary" id="a1">底部取点</button><button class="btn good" id="a2">顶部取点</button><button class="btn" id="a3">拍照分享</button><button class="btn warn" id="a4">水平校准</button></div>
+  <div id="toast"></div>
+</div>
+<script>
+const $=id=>document.getElementById(id); const video=$('video'), canvas=$('draw'), ctx=canvas.getContext('2d');
+let mode='distance', beta=0,gamma=0,alpha=0,zero=0,angleSign=1,lastManual=0,stream=null;
+let bottomAngle=null,topAngle=null,lastDistance=null,lastHeight=null,arPoints=[],countBoxes=[];
+const prefs=JSON.parse(localStorage.getItem('prefs')||'{}');
+if(prefs.lensHeight) $('lensHeight').value=prefs.lensHeight; if(prefs.hfov) $('hfov').value=prefs.hfov; if(prefs.angleOffset) $('angleOffset').value=prefs.angleOffset; if(prefs.zero) zero=prefs.zero; if(prefs.angleSign) angleSign=prefs.angleSign;
+function savePrefs(){localStorage.setItem('prefs',JSON.stringify({lensHeight:$('lensHeight').value,hfov:$('hfov').value,angleOffset:$('angleOffset').value,zero,angleSign})); $('hfovVal').textContent=$('hfov').value+'°'; $('offVal').textContent=$('angleOffset').value+'°'} savePrefs();
+function toast(msg){$('toast').textContent=msg;$('toast').style.display='block';clearTimeout(window.tt);window.tt=setTimeout(()=>$('toast').style.display='none',1800); if(window.AndroidBridge) AndroidBridge.toast(msg)}
+async function startCamera(){try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}},audio:false});video.srcObject=stream;$('status').textContent='相机已启动。点击屏幕中心对准目标，按按钮取点。'}catch(e){$('status').textContent='相机启动失败：'+e.message;toast('请允许相机权限')}}
+function resize(){canvas.width=innerWidth*devicePixelRatio;canvas.height=innerHeight*devicePixelRatio;ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);draw()} addEventListener('resize',resize); resize(); startCamera();
+addEventListener('deviceorientation',e=>{ if(e.beta!==null){beta=e.beta;gamma=e.gamma||0;alpha=e.alpha||0;} },true);
+function currentAngle(){return angleSign*((beta-zero)+Number($('angleOffset').value||0))}
+function lensM(){return Number($('lensHeight').value||150)/100}
+function deg(v){return v*Math.PI/180} function fmtM(v){if(!isFinite(v))return'--'; return v<1?(v*100).toFixed(1)+' cm':v.toFixed(2)+' m'}
+function groundDistanceFromAngle(a){let abs=Math.max(1.2,Math.abs(a)); return lensM()/Math.tan(deg(abs));}
+function setMode(m){mode=m;document.querySelectorAll('.mode').forEach(b=>b.classList.toggle('active',b.dataset.mode===m)); arPoints=[];countBoxes=[];updateButtons();$('ruler').style.display=m==='ruler'?'block':'none';drawRuler();draw()}
+document.querySelectorAll('.mode').forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
+function updateButtons(){let a1=$('a1'),a2=$('a2'),a3=$('a3'),a4=$('a4');a3.textContent='拍照分享';a4.textContent='水平校准';
+ if(mode==='distance'){a1.textContent='底部取点';a2.textContent='顶部取点'}
+ if(mode==='ar'){a1.textContent='设起点';a2.textContent='设终点'}
+ if(mode==='count'){a1.textContent='视觉计数';a2.textContent='重置结果'}
+ if(mode==='level'){a1.textContent='记录水平';a2.textContent='挂画判定'}
+ if(mode==='angle'){a1.textContent='角度归零';a2.textContent='读当前角'}
+ if(mode==='ruler'){a1.textContent='校准PPI';a2.textContent='切换单位'} }
+function calibrateHorizon(){zero=beta;savePrefs();toast('已把当前姿态设为水平 0°')} function flipAngle(){angleSign*=-1;savePrefs();toast('已切换角度方向')} function toggleSettings(){let s=$('settings');s.style.display=s.style.display==='block'?'none':'block'}
+function resetAll(){bottomAngle=topAngle=lastDistance=lastHeight=null;arPoints=[];countBoxes=[];toast('已清空');draw()}
+$('a4').onclick=calibrateHorizon; $('a3').onclick=shareShot;
+$('a1').onclick=()=>{if(mode==='distance')takeBottom();else if(mode==='ar')toast('请直接点画面中的起点');else if(mode==='count')runCount();else if(mode==='level')calibrateHorizon();else if(mode==='angle')calibrateHorizon();else toast('把手机屏幕贴近实物即可作临时直尺')};
+$('a2').onclick=()=>{if(mode==='distance')takeTop();else if(mode==='ar')toast('请直接点画面中的终点');else if(mode==='count'){countBoxes=[];toast('已重置计数')}else if(mode==='level')judgeLevel();else if(mode==='angle')toast('当前角：'+currentAngle().toFixed(1)+'°')};
+canvas.addEventListener('click',e=>{if(mode!=='ar')return;const r=canvas.getBoundingClientRect();const p={x:e.clientX-r.left,y:e.clientY-r.top,angle:currentAngle(),d:lastDistance||groundDistanceFromAngle(currentAngle())}; if(arPoints.length>=2)arPoints=[]; arPoints.push(p); if(arPoints.length===2)toast('长度：'+fmtM(arLength())); draw()});
+function takeBottom(){bottomAngle=currentAngle();lastDistance=groundDistanceFromAngle(bottomAngle);$('dist').textContent=fmtM(lastDistance);toast('底部点完成：距离约 '+fmtM(lastDistance));draw()}
+function takeTop(){if(bottomAngle===null){toast('请先对准底部取点');return}topAngle=currentAngle();let h=lensM()+lastDistance*Math.tan(deg(topAngle));lastHeight=Math.abs(h);toast('顶部点完成：高度约 '+fmtM(lastHeight));draw()}
+function arLength(){if(arPoints.length<2)return 0;let [p1,p2]=arPoints;let fov=Number($('hfov').value),vfov=fov*innerHeight/innerWidth;function project(p){let ax=(p.x/innerWidth-.5)*fov;let ay=(.5-p.y/innerHeight)*vfov;let d=p.d;return{x:d*Math.tan(deg(ax)),y:d*Math.tan(deg(ay)),z:d}}let a=project(p1),b=project(p2);return Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z)}
+function judgeLevel(){let r=Math.abs(gamma);let msg=r<1?'很平，基本不歪':r<3?'轻微倾斜，可微调':'明显倾斜，建议调整';toast('横滚 '+gamma.toFixed(1)+'°：'+msg)}
+function drawRuler(){let el=$('ruler');el.innerHTML='';let ppi=Number(localStorage.getItem('ppi')||96);let pxPerCm=ppi/2.54;let w=innerWidth-36;for(let i=0;i<w/pxPerCm*10;i++){let t=document.createElement('div');t.className='tick '+(i%10===0?'major':i%5===0?'mid':'minor');t.style.left=(i*pxPerCm/10)+'px';if(i%10===0){let s=document.createElement('span');s.textContent=i/10+' cm';t.appendChild(s)}el.appendChild(t)}}
+function runCount(){try{let c=document.createElement('canvas'),cw=360,ch=Math.round(360*video.videoHeight/video.videoWidth)||240;c.width=cw;c.height=ch;let x=c.getContext('2d');x.drawImage(video,0,0,cw,ch);let img=x.getImageData(0,0,cw,ch),d=img.data;let gray=new Uint8ClampedArray(cw*ch),sum=0;for(let i=0,j=0;i<d.length;i+=4,j++){let g=(d[i]*.299+d[i+1]*.587+d[i+2]*.114)|0;gray[j]=g;sum+=g}let mean=sum/gray.length;let bin=new Uint8Array(cw*ch);for(let i=0;i<gray.length;i++)bin[i]=gray[i]<mean*.82?1:0;let seen=new Uint8Array(cw*ch);countBoxes=[];let qx=[],qy=[];for(let y=2;y<ch-2;y++)for(let x0=2;x0<cw-2;x0++){let idx=y*cw+x0;if(!bin[idx]||seen[idx])continue;let minx=x0,maxx=x0,miny=y,maxy=y,area=0;qx=[x0];qy=[y];seen[idx]=1;for(let qi=0;qi<qx.length;qi++){let xx=qx[qi],yy=qy[qi];area++;if(xx<minx)minx=xx;if(xx>maxx)maxx=xx;if(yy<miny)miny=yy;if(yy>maxy)maxy=yy;let ns=[[1,0],[-1,0],[0,1],[0,-1]];for(let k of ns){let nx=xx+k[0],ny=yy+k[1],ni=ny*cw+nx;if(nx>1&&ny>1&&nx<cw-1&&ny<ch-1&&bin[ni]&&!seen[ni]){seen[ni]=1;qx.push(nx);qy.push(ny)}}}let bw=maxx-minx+1,bh=maxy-miny+1,ratio=Math.max(bw/bh,bh/bw);if(area>18&&area<3500&&ratio>1.8){countBoxes.push({x:minx/cw*innerWidth,y:miny/ch*innerHeight,w:bw/cw*innerWidth,h:bh/ch*innerHeight})}}
+ toast('视觉计数约 '+countBoxes.length+' 个。复杂背景需人工复核');draw()}catch(e){toast('计数失败：'+e.message)}}
+function draw(){ctx.clearRect(0,0,innerWidth,innerHeight);ctx.lineWidth=2;ctx.strokeStyle='rgba(0,212,255,.95)';ctx.fillStyle='rgba(0,212,255,.95)';let ca=currentAngle();$('pitch').textContent=ca.toFixed(1)+'°';$('roll').textContent=gamma.toFixed(1)+'°'; if(lastDistance)$('dist').textContent=fmtM(lastDistance);
+ let txt=''; if(mode==='distance'){txt='<strong>测距/高度</strong>：对准物体底部点“底部取点”，再对准顶部点“顶部取点”。'; if(bottomAngle!==null)txt+=' 距离≈<strong>'+fmtM(lastDistance)+'</strong>，底角 '+bottomAngle.toFixed(1)+'°。'; if(lastHeight)txt+=' 高度≈<strong>'+fmtM(lastHeight)+'</strong>。'}
+ if(mode==='ar'){txt='<strong>AR标尺</strong>：先用测距获得距离，再在画面上点起点/终点。'; if(arPoints.length===2)txt+=' 长度≈<strong>'+fmtM(arLength())+'</strong>。'; arPoints.forEach((p,i)=>{ctx.beginPath();ctx.arc(p.x,p.y,8,0,7);ctx.fill();ctx.fillText(i?'终':'起',p.x+10,p.y-10)}); if(arPoints.length===2){ctx.beginPath();ctx.moveTo(arPoints[0].x,arPoints[0].y);ctx.lineTo(arPoints[1].x,arPoints[1].y);ctx.stroke();}}
+ if(mode==='count'){txt='<strong>AI计数</strong>：本版为本地视觉启发式计数，适合串串/钢筋等高对比、重复细长目标。'; if(countBoxes.length)txt+=' 当前约 <strong>'+countBoxes.length+'</strong> 个。'; ctx.strokeStyle='rgba(84,240,168,.95)';countBoxes.forEach(b=>ctx.strokeRect(b.x,b.y,b.w,b.h));}
+ if(mode==='level'){let abs=Math.abs(gamma);txt='<strong>水平仪/挂画校准</strong>：横滚 <strong>'+gamma.toFixed(1)+'°</strong>，'+(abs<1?'基本水平':abs<3?'略歪':'明显倾斜')+'。'; ctx.strokeStyle=abs<1?'#54f0a8':abs<3?'#ffd166':'#ff6b7a';ctx.beginPath();ctx.arc(innerWidth/2,innerHeight/2,70,0,7);ctx.moveTo(innerWidth/2-90,innerHeight/2+gamma*3);ctx.lineTo(innerWidth/2+90,innerHeight/2-gamma*3);ctx.stroke();}
+ if(mode==='angle'){txt='<strong>量角器</strong>：当前相对角 <strong>'+ca.toFixed(1)+'°</strong>。按“角度归零”可把当前位置作为 0°。';ctx.beginPath();ctx.arc(innerWidth/2,innerHeight/2,85,Math.PI,Math.PI+deg(ca));ctx.stroke();}
+ if(mode==='ruler'){txt='<strong>直尺</strong>：屏幕直尺依赖系统 PPI，适合临时短距离估算。更准请用实体尺校准。'}
+ $('readText').innerHTML=txt}
+function loop(){draw();requestAnimationFrame(loop)} loop();
+function shareShot(){let out=document.createElement('canvas');out.width=video.videoWidth||1280;out.height=video.videoHeight||720;let ox=out.getContext('2d');try{ox.drawImage(video,0,0,out.width,out.height)}catch(e){ox.fillStyle='#111';ox.fillRect(0,0,out.width,out.height)}ox.fillStyle='rgba(0,0,0,.5)';ox.fillRect(0,out.height-170,out.width,170);ox.fillStyle='#fff';ox.font=Math.round(out.width/42)+'px sans-serif';let lines=$('readText').innerText.match(/.{1,36}/g)||[];lines.slice(0,4).forEach((l,i)=>ox.fillText(l,30,out.height-120+i*34));ox.strokeStyle='#00d4ff';ox.lineWidth=4;ox.beginPath();ox.moveTo(out.width/2-60,out.height/2);ox.lineTo(out.width/2+60,out.height/2);ox.moveTo(out.width/2,out.height/2-60);ox.lineTo(out.width/2,out.height/2+60);ox.stroke();let url=out.toDataURL('image/png'); if(window.AndroidBridge)AndroidBridge.sharePng(url); else {let a=document.createElement('a');a.href=url;a.download='measure.png';a.click()}}
+setInterval(()=>{savePrefs();},2500); updateButtons();
+</script>
+</body>
+</html>
